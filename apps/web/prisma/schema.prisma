@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BroadcastStatus {
+  PENDING
+  LIVE
+  ENDED
+  INTERRUPTED
+}
+
+enum QueueStatus {
+  WAITING
+  ACTIVE
+  SKIPPED
+  COMPLETED
+  COOLDOWN
+}
+
+enum StreamStatus {
+  IDLE
+  WAITING_FOR_DJ
+  LIVE
+  HANDOVER
+  RELAY_UNAVAILABLE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  displayName  String
+  image        String?
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  djProfile        DjProfile?
+  listenerPresence ListenerPresence?
+  changeVotes      ChangeVote[]
+
+  @@index([createdAt])
+}
+
+model DjProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  displayName String
+  city        String
+  soundsystem String
+  description String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  broadcastSessions BroadcastSession[]
+  queueEntries      DjQueueEntry[]
+  activeStreamState StreamState[]       @relation("ActiveDjProfile")
+
+  @@index([active])
+  @@index([city])
+}
+
+model BroadcastSession {
+  id          String          @id @default(cuid())
+  djProfileId String
+  status      BroadcastStatus @default(PENDING)
+  startedAt   DateTime?
+  endedAt     DateTime?
+  endReason   String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  djProfile         DjProfile    @relation(fields: [djProfileId], references: [id], onDelete: Restrict)
+  changeVotes       ChangeVote[]
+  activeStreamState StreamState[] @relation("ActiveBroadcastSession")
+
+  @@index([status])
+  @@index([djProfileId, status])
+  @@index([startedAt])
+}
+
+model DjQueueEntry {
+  id          String      @id @default(cuid())
+  djProfileId String
+  queuedAt    DateTime    @default(now())
+  status      QueueStatus @default(WAITING)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  djProfile DjProfile @relation(fields: [djProfileId], references: [id], onDelete: Cascade)
+
+  @@index([status, queuedAt])
+  @@index([djProfileId, status])
+}
+
+model ListenerPresence {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  lastHeartbeatAt DateTime
+  listeningState  String?
+  currentPage     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([lastHeartbeatAt])
+}
+
+model ChangeVote {
+  id                 String   @id @default(cuid())
+  broadcastSessionId String
+  userId             String
+  createdAt          DateTime @default(now())
+
+  broadcastSession BroadcastSession @relation(fields: [broadcastSessionId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastSessionId, userId])
+  @@index([broadcastSessionId])
+  @@index([userId])
+}
+
+model StreamState {
+  id                       String       @id @default("global")
+  status                   StreamStatus @default(IDLE)
+  activeBroadcastSessionId String?
+  activeDjProfileId        String?
+  updatedAt                DateTime     @updatedAt
+
+  activeBroadcastSession BroadcastSession? @relation("ActiveBroadcastSession", fields: [activeBroadcastSessionId], references: [id], onDelete: SetNull)
+  activeDjProfile        DjProfile?        @relation("ActiveDjProfile", fields: [activeDjProfileId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
