@@ -21,6 +21,9 @@ export function DjAudioPanel({ streamStatus, connectionStatus, canStartBroadcast
       <p>Connection: {broadcast.connectionState}</p>
       <p>App connection: {connectionStatus}</p>
       <p>Stream: {streamStatus}</p>
+      <button type="button" onClick={audioInputs.refreshDevices}>
+        {audioInputs.permissionState === "denied" ? "Retry microphone access" : "Enable microphone"}
+      </button>
       <label htmlFor="audioInput">Input device</label>
       <select
         id="audioInput"
