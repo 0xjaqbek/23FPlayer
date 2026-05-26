@@ -42,9 +42,7 @@ export function Player({ state }: PlayerProps) {
         )}
         <p>{state.listenerCount} logged-in listeners</p>
         {state.stream.url ? (
-          <audio controls src={state.stream.url} preload="none">
-            <track kind="captions" />
-          </audio>
+          <audio aria-label="Live audio stream" controls src={state.stream.url} preload="none" />
         ) : (
           <p>Stream is not available.</p>
         )}
@@ -72,8 +70,8 @@ export function Player({ state }: PlayerProps) {
         <section className="vote-panel">
           <h2>Change DJ</h2>
           <p>{voteProgress} votes needed for handover</p>
-          <button type="button" disabled={state.vote.hasVoted}>
-            {state.vote.hasVoted ? "Vote recorded" : "Vote to change DJ"}
+          <button type="button" disabled>
+            {state.vote.hasVoted ? "Vote recorded" : "Voting opens soon"}
           </button>
         </section>
       ) : null}

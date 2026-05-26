@@ -44,6 +44,23 @@ export async function getListenerState(userId: string | undefined): Promise<List
   const now = new Date();
   const presenceCutoff = new Date(now.getTime() - presenceWindowMs);
 
+  if (userId) {
+    await prisma.listenerPresence.upsert({
+      where: { userId },
+      create: {
+        userId,
+        lastHeartbeatAt: now,
+        currentPage: "player",
+        listeningState: "open",
+      },
+      update: {
+        lastHeartbeatAt: now,
+        currentPage: "player",
+        listeningState: "open",
+      },
+    });
+  }
+
   const [streamState, queue, listenerCount] = await Promise.all([
     prisma.streamState.findUnique({
       where: { id: "global" },
@@ -99,7 +116,8 @@ export async function getListenerState(userId: string | undefined): Promise<List
       queuedAt: entry.queuedAt.toISOString(),
     })),
     vote: {
-      canVote: status === "live" && queue.length > 0 && Boolean(streamState?.activeBroadcastSessionId),
+      canVote:
+        status === "live" && queue.length > 0 && listenerCount > 0 && Boolean(streamState?.activeBroadcastSessionId),
       hasVoted,
       votes,
       presentListeners: listenerCount,
