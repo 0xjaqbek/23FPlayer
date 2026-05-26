@@ -4,11 +4,17 @@ import bcrypt from "bcryptjs";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import {
+  clearRegistrationGateCookie,
+  getRegistrationGateSecret,
+  hasValidRegistrationGateCookie,
+  registrationGateCookieMaxAgeSeconds,
+  registrationGateCookieName,
+} from "@/features/auth/server/registration-gate-cookie";
 import { validateRegistrationAccessPassword } from "@/features/auth/server/registration-gate";
+import { createRegistrationGateToken } from "@/features/auth/server/registration-gate-token";
 import { prisma } from "@/lib/prisma";
 
-const gateCookieName = "registration_gate_passed";
-const gateCookieMaxAgeSeconds = 15 * 60;
 const maxGateAttempts = 5;
 const gateAttemptWindowMs = 10 * 60 * 1000;
 const gateAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -57,11 +63,11 @@ export async function submitRegistrationGate(_state: RegisterActionState, formDa
   }
 
   const cookieStore = await cookies();
-  cookieStore.set(gateCookieName, "true", {
+  cookieStore.set(registrationGateCookieName, createRegistrationGateToken({ secret: getRegistrationGateSecret() }), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    maxAge: gateCookieMaxAgeSeconds,
+    maxAge: registrationGateCookieMaxAgeSeconds,
     path: "/register",
   });
 
@@ -71,7 +77,7 @@ export async function submitRegistrationGate(_state: RegisterActionState, formDa
 export async function createAccount(_state: RegisterActionState, formData: FormData) {
   const cookieStore = await cookies();
 
-  if (cookieStore.get(gateCookieName)?.value !== "true") {
+  if (!hasValidRegistrationGateCookie(cookieStore.get(registrationGateCookieName)?.value)) {
     return { error: "Registration access is required." };
   }
 
@@ -102,6 +108,6 @@ export async function createAccount(_state: RegisterActionState, formData: FormD
     },
   });
 
-  cookieStore.delete(gateCookieName);
+  clearRegistrationGateCookie(cookieStore);
   redirect("/login");
 }
