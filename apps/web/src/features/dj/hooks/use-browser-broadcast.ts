@@ -91,6 +91,11 @@ export function useBrowserBroadcast(stream: MediaStream | null) {
         recorderRef.current?.stop();
         recorderRef.current = null;
 
+        if (stoppedRef.current) {
+          setBroadcastState(stream ? "ready" : "input missing");
+          return;
+        }
+
         if (!stoppedRef.current && attempt === 0) {
           void connect(1);
           return;
