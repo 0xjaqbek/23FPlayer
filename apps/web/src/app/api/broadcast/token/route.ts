@@ -1,28 +1,9 @@
-import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
+import { canCreateBroadcastToken } from "@/features/relay/server/broadcast-token-auth";
+import { audioRelay } from "@/features/relay/server/custom-relay-client";
 import { prisma } from "@/lib/prisma";
-
-const tokenTtlSeconds = 60;
-
-function signBroadcastToken(payload: string, secret: string) {
-  return createHmac("sha256", secret).update(payload).digest("base64url");
-}
-
-function createBroadcastToken(input: { broadcastSessionId: string; djProfileId: string }) {
-  const secret = process.env.RELAY_SHARED_SECRET || process.env.AUTH_SECRET;
-
-  if (!secret) {
-    throw new Error("Broadcast token secret is not configured.");
-  }
-
-  const expiresAt = Math.floor(Date.now() / 1000) + tokenTtlSeconds;
-  const payload = `${input.broadcastSessionId}.${input.djProfileId}.${expiresAt}`;
-  const signature = signBroadcastToken(payload, secret);
-
-  return `${payload}.${signature}`;
-}
 
 async function runSerializableTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -84,16 +65,24 @@ export async function POST() {
       },
     });
 
+    if (
+      !canCreateBroadcastToken({
+        djProfileActive: djProfile.active,
+        hasActiveQueueEntry: true,
+        streamStatus: streamState.status,
+        streamActiveDjProfileId: streamState.activeDjProfileId,
+        djProfileId: djProfile.id,
+      })
+    ) {
+        return null;
+    }
+
     if (streamState.status === "LIVE") {
-      if (streamState.activeDjProfileId !== djProfile.id || !streamState.activeBroadcastSession) {
+      if (!streamState.activeBroadcastSession) {
         return null;
       }
 
       return streamState.activeBroadcastSession;
-    }
-
-    if (streamState.status !== "WAITING_FOR_DJ" || streamState.activeDjProfileId !== djProfile.id) {
-      return null;
     }
 
     const nextSession = await tx.broadcastSession.create({
@@ -121,11 +110,9 @@ export async function POST() {
   }
 
   return NextResponse.json({
-    token: createBroadcastToken({
+    ...(await audioRelay.createBroadcastToken({
       broadcastSessionId: broadcastSession.id,
       djProfileId: djProfile.id,
-    }),
-    websocketUrl: process.env.RELAY_PUBLIC_WS_URL ?? "ws://localhost:4010/broadcast",
-    expiresIn: tokenTtlSeconds,
+    })),
   });
 }
