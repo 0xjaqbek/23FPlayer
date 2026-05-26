@@ -1,6 +1,8 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import type { ListenerState } from "@/features/listener/server/get-listener-state";
+import { PresenceHeartbeat } from "./presence-heartbeat";
 
 type PlayerProps = {
   state: ListenerState;
@@ -22,11 +24,31 @@ function formatStatus(status: ListenerState["stream"]["status"]) {
 }
 
 export function Player({ state }: PlayerProps) {
+  const [vote, setVote] = useState(state.vote);
+  const [isPending, startTransition] = useTransition();
   const voteProgress =
-    state.vote.requiredVotes > 0 ? `${state.vote.votes}/${state.vote.requiredVotes}` : `${state.vote.votes}/0`;
+    vote.requiredVotes > 0 ? `${vote.votes}/${vote.requiredVotes}` : `${vote.votes}/0`;
+
+  function submitVote() {
+    void (async () => {
+      const response = await fetch("/api/vote/change-dj", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const nextVote = await response.json();
+      startTransition(() => {
+        setVote(nextVote);
+      });
+    })();
+  }
 
   return (
     <main className="player-shell">
+      <PresenceHeartbeat />
       <section className="player-now">
         <p>{formatStatus(state.stream.status)}</p>
         <h1>{state.activeDj?.displayName ?? "No DJ on air"}</h1>
@@ -66,12 +88,12 @@ export function Player({ state }: PlayerProps) {
         )}
       </section>
 
-      {state.vote.canVote ? (
+      {vote.canVote ? (
         <section className="vote-panel">
           <h2>Change DJ</h2>
           <p>{voteProgress} votes needed for handover</p>
-          <button type="button" disabled>
-            {state.vote.hasVoted ? "Vote recorded" : "Voting opens soon"}
+          <button type="button" disabled={vote.hasVoted || isPending} onClick={submitVote}>
+            {vote.hasVoted ? "Vote recorded" : "Vote to change DJ"}
           </button>
         </section>
       ) : null}
