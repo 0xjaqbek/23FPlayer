@@ -25,3 +25,5 @@ pnpm --filter web test
 pnpm --filter web e2e
 pnpm --filter web build
 ```
+
+Playwright uses `PLAYWRIGHT_BASE_URL` when provided and otherwise starts the local dev server on `http://127.0.0.1:3000`.

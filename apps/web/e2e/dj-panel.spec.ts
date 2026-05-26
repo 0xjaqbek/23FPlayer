@@ -5,7 +5,7 @@ test("dj panel requires login before showing controls", async ({ page }) => {
   await expect(page).toHaveURL(/\/login/);
 });
 
-test("browser audio APIs can be mocked for the dj panel", async ({ page }) => {
+test("redirects unauthenticated users even when browser audio APIs are mocked", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "mediaDevices", {
       value: {
@@ -35,6 +35,7 @@ test("browser audio APIs can be mocked for the dj panel", async ({ page }) => {
 });
 
 test.describe.skip("authenticated dj panel", () => {
+  // TODO: unskip after adding an authenticated storage-state and seeded eligible DJ fixture.
   test("renders level meter and queue controls", async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "mediaDevices", {

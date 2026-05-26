@@ -6,6 +6,7 @@ test("redirects unauthenticated users from player to login", async ({ page }) =>
 });
 
 test.describe.skip("authenticated listener player", () => {
+  // TODO: unskip after adding an authenticated storage-state and seeded listener/DJ queue fixture.
   test("loads player, shows queue, and hides voting when queue is empty", async ({ page }) => {
     await page.goto("/player");
 
