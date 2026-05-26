@@ -10,7 +10,7 @@ export function createHttpListener(response: ServerResponse): RelayClient {
 
   return {
     send(data) {
-      response.write(data);
+      return response.write(data);
     },
     close() {
       response.end();

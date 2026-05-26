@@ -1,18 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
-import { createBroadcastTokenForTest, verifyBroadcastToken, verifyListenerToken } from "../src/auth";
-import { SessionManager, type RelayClient } from "../src/session-manager";
+import { createBroadcastTokenForTest, verifyBroadcastToken, verifyListenerToken } from "../src/auth.js";
+import { SessionManager, type RelayClient } from "../src/session-manager.js";
 
 function createClient() {
   return {
     sent: [] as Buffer[],
     closed: false,
+    writable: true,
     send(data: Buffer) {
+      if (!this.writable) {
+        return false;
+      }
       this.sent.push(data);
+      return true;
     },
     close() {
       this.closed = true;
     },
-  } satisfies RelayClient & { sent: Buffer[]; closed: boolean };
+  } satisfies RelayClient & { sent: Buffer[]; closed: boolean; writable: boolean };
 }
 
 describe("verifyBroadcastToken", () => {
@@ -85,5 +90,28 @@ describe("SessionManager", () => {
 
     expect(onGraceExpired).toHaveBeenCalledWith("session-1");
     vi.useRealTimers();
+  });
+
+  it("rejects a different session during grace recovery", () => {
+    const manager = new SessionManager(15_000, vi.fn());
+    const broadcaster = createClient();
+
+    manager.acceptBroadcaster({ broadcastSessionId: "session-1", djProfileId: "dj-1", expiresAt: 1_000 }, broadcaster);
+    manager.disconnectBroadcaster(broadcaster);
+
+    expect(manager.acceptBroadcaster({ broadcastSessionId: "session-2", djProfileId: "dj-2", expiresAt: 1_000 }, createClient())).toBe(false);
+    expect(manager.acceptBroadcaster({ broadcastSessionId: "session-1", djProfileId: "dj-1", expiresAt: 1_000 }, createClient())).toBe(true);
+  });
+
+  it("removes listeners that cannot accept chunks", () => {
+    const manager = new SessionManager(15_000, vi.fn());
+    const listener = createClient();
+    listener.writable = false;
+    manager.addListener(listener);
+
+    manager.broadcastChunk(Buffer.from("audio"));
+
+    expect(listener.closed).toBe(true);
+    expect(manager.listenerCount()).toBe(0);
   });
 });

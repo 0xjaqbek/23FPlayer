@@ -1,63 +1,104 @@
 import http from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { verifyBroadcastToken, verifyListenerToken } from "./auth";
-import { SessionManager, type RelayClient } from "./session-manager";
-import { createHttpListener } from "./stream-endpoint";
+import { verifyBroadcastToken, verifyListenerToken } from "./auth.js";
+import { SessionManager, type RelayClient } from "./session-manager.js";
+import { createHttpListener } from "./stream-endpoint.js";
 
-const port = Number(process.env.PORT ?? 4010);
-const relaySecret = process.env.RELAY_SHARED_SECRET ?? "";
-const appHandoverUrl = process.env.APP_HANDOVER_URL;
-const gracePeriodMs = 15_000;
+type RelayServerOptions = {
+  relaySecret: string;
+  appHandoverUrl?: string;
+  gracePeriodMs?: number;
+  maxPayloadBytes?: number;
+};
 
-async function notifyGraceExpired(broadcastSessionId: string) {
-  if (!appHandoverUrl) {
-    return;
-  }
+export function createRelayServer(options: RelayServerOptions) {
+  const gracePeriodMs = options.gracePeriodMs ?? 15_000;
+  const maxPayloadBytes = options.maxPayloadBytes ?? 256_000;
 
-  await fetch(appHandoverUrl, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${relaySecret}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ broadcastSessionId }),
-  });
-}
-
-const sessionManager = new SessionManager(gracePeriodMs, notifyGraceExpired);
-const server = http.createServer((request, response) => {
-  if (request.url?.startsWith("/stream")) {
-    const url = new URL(request.url, "http://localhost");
-    const listenerToken = url.searchParams.get("token") ?? request.headers.authorization?.replace(/^Bearer\s+/i, "");
-
-    if (!verifyListenerToken(listenerToken ?? undefined, relaySecret)) {
-      response.writeHead(401, { "content-type": "application/json" });
-      response.end(JSON.stringify({ error: "Unauthorized listener" }));
+  async function notifyGraceExpired(broadcastSessionId: string) {
+    if (!options.appHandoverUrl) {
       return;
     }
 
-    const listener = createHttpListener(response);
-    sessionManager.addListener(listener);
-    request.on("close", () => sessionManager.removeListener(listener));
-    return;
+    await fetch(options.appHandoverUrl, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${options.relaySecret}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ broadcastSessionId }),
+    });
   }
 
-  if (request.url === "/health") {
-    response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({ ok: true }));
-    return;
-  }
+  const sessionManager = new SessionManager(gracePeriodMs, notifyGraceExpired);
+  const server = http.createServer((request, response) => {
+    if (request.url?.startsWith("/stream")) {
+      const url = new URL(request.url, "http://localhost");
+      const listenerToken = url.searchParams.get("token") ?? request.headers.authorization?.replace(/^Bearer\s+/i, "");
 
-  response.writeHead(404);
-  response.end();
-});
+      if (!verifyListenerToken(listenerToken ?? undefined, options.relaySecret)) {
+        response.writeHead(401, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: "Unauthorized listener" }));
+        return;
+      }
 
-const websocketServer = new WebSocketServer({ server, path: "/broadcast" });
+      const listener = createHttpListener(response);
+      sessionManager.addListener(listener);
+      request.on("close", () => sessionManager.removeListener(listener));
+      return;
+    }
+
+    if (request.url === "/health") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    response.writeHead(404);
+    response.end();
+  });
+
+  const websocketServer = new WebSocketServer({ server, path: "/broadcast", maxPayload: maxPayloadBytes });
+
+  websocketServer.on("connection", (socket, request) => {
+    const url = new URL(request.url ?? "", "http://localhost");
+    const claims = verifyBroadcastToken(url.searchParams.get("token") ?? undefined, options.relaySecret);
+    const client = toRelayClient(socket);
+
+    if (!claims || !sessionManager.acceptBroadcaster(claims, client)) {
+      socket.close(1008, "Unauthorized broadcaster");
+      return;
+    }
+
+    socket.on("message", (data) => {
+      const chunk = normalizeWebSocketData(data);
+
+      if (chunk.length > maxPayloadBytes) {
+        socket.close(1009, "Audio chunk too large");
+        return;
+      }
+
+      sessionManager.broadcastChunk(chunk);
+    });
+    socket.on("close", () => sessionManager.disconnectBroadcaster(client));
+  });
+
+  return { server, websocketServer, sessionManager };
+}
 
 function toRelayClient(socket: WebSocket): RelayClient {
   return {
     send(data) {
-      socket.send(data);
+      if (socket.readyState !== WebSocket.OPEN) {
+        return false;
+      }
+
+      try {
+        socket.send(data);
+        return true;
+      } catch {
+        return false;
+      }
     },
     close() {
       socket.close();
@@ -80,23 +121,3 @@ function normalizeWebSocketData(data: WebSocket.RawData) {
 
   return Buffer.from(data);
 }
-
-websocketServer.on("connection", (socket, request) => {
-  const url = new URL(request.url ?? "", "http://localhost");
-  const claims = verifyBroadcastToken(url.searchParams.get("token") ?? undefined, relaySecret);
-  const client = toRelayClient(socket);
-
-  if (!claims || !sessionManager.acceptBroadcaster(claims, client)) {
-    socket.close(1008, "Unauthorized broadcaster");
-    return;
-  }
-
-  socket.on("message", (data) => {
-    sessionManager.broadcastChunk(normalizeWebSocketData(data));
-  });
-  socket.on("close", () => sessionManager.disconnectBroadcaster(client));
-});
-
-server.listen(port, () => {
-  console.log(`Relay listening on ${port}`);
-});
