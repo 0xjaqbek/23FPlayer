@@ -10,6 +10,7 @@ export type QueueRepository = {
   createWaitingEntry(djProfileId: string): Promise<QueueEntryRecord>;
   findWaitingEntries(): Promise<QueueEntryRecord[]>;
   findFirstWaitingEntry(): Promise<QueueEntryRecord | null>;
+  hasLiveBroadcast(): Promise<boolean>;
   markEntryActive(entryId: string): Promise<QueueEntryRecord>;
   markEntryCompleted(entryId: string): Promise<QueueEntryRecord>;
 };
@@ -29,6 +30,10 @@ export async function getQueue(repository: QueueRepository) {
 }
 
 export async function promoteNextDj(repository: QueueRepository) {
+  if (await repository.hasLiveBroadcast()) {
+    return null;
+  }
+
   const nextEntry = await repository.findFirstWaitingEntry();
 
   if (!nextEntry) {

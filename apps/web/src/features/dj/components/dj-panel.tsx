@@ -1,5 +1,5 @@
 import type { DjProfile, DjQueueEntry } from "@prisma/client";
-import { joinDjQueue } from "@/features/dj/server/dj-profile-actions";
+import { handOverAntenna, joinDjQueue, startBroadcast } from "@/features/dj/server/dj-profile-actions";
 
 type DjPanelProps = {
   profile: DjProfile | null;
@@ -50,14 +50,14 @@ export function DjPanel({ profile, queueEntry, queuePosition, isActiveDj }: DjPa
           </form>
         ) : null}
         {queueEntry?.status === "ACTIVE" ? (
-          <button type="button" disabled>
-            Start broadcast opens soon
-          </button>
+          <form action={startBroadcast}>
+            <button type="submit">Start broadcast</button>
+          </form>
         ) : null}
         {isActiveDj ? (
-          <button type="button" disabled>
-            Hand over antenna opens soon
-          </button>
+          <form action={handOverAntenna}>
+            <button type="submit">Hand over antenna</button>
+          </form>
         ) : null}
       </section>
     </main>

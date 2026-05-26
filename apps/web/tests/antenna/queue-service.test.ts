@@ -1,11 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getQueue, joinQueue, promoteNextDj, type QueueEntryRecord, type QueueRepository } from "@/features/antenna/server/queue-service";
 
-function createInMemoryQueueRepository(): QueueRepository & { entries: QueueEntryRecord[] } {
+function createInMemoryQueueRepository(): QueueRepository & { entries: QueueEntryRecord[]; liveBroadcast: boolean } {
   const entries: QueueEntryRecord[] = [];
+  let liveBroadcast = false;
 
   return {
     entries,
+    get liveBroadcast() {
+      return liveBroadcast;
+    },
+    set liveBroadcast(value: boolean) {
+      liveBroadcast = value;
+    },
     async findActiveOrWaitingByDjProfileId(djProfileId) {
       return entries.find((entry) => entry.djProfileId === djProfileId && ["ACTIVE", "WAITING"].includes(entry.status)) ?? null;
     },
@@ -24,6 +31,9 @@ function createInMemoryQueueRepository(): QueueRepository & { entries: QueueEntr
     },
     async findFirstWaitingEntry() {
       return (await this.findWaitingEntries())[0] ?? null;
+    },
+    async hasLiveBroadcast() {
+      return liveBroadcast;
     },
     async markEntryActive(entryId) {
       const entry = entries.find((candidate) => candidate.id === entryId);
@@ -45,7 +55,7 @@ function createInMemoryQueueRepository(): QueueRepository & { entries: QueueEntr
 }
 
 describe("queue service", () => {
-  let repository: QueueRepository & { entries: QueueEntryRecord[] };
+  let repository: QueueRepository & { entries: QueueEntryRecord[]; liveBroadcast: boolean };
 
   beforeEach(() => {
     repository = createInMemoryQueueRepository();
@@ -75,5 +85,15 @@ describe("queue service", () => {
     expect(promoted?.djProfileId).toBe("dj-1");
     expect(promoted?.status).toBe("ACTIVE");
     expect((await getQueue(repository)).map((entry) => entry.djProfileId)).toEqual(["dj-2"]);
+  });
+
+  it("does not promote a waiting DJ while another DJ is live", async () => {
+    await joinQueue(repository, "dj-1");
+    repository.liveBroadcast = true;
+
+    const promoted = await promoteNextDj(repository);
+
+    expect(promoted).toBeNull();
+    expect((await getQueue(repository)).map((entry) => entry.djProfileId)).toEqual(["dj-1"]);
   });
 });

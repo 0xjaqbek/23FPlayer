@@ -63,22 +63,195 @@ export async function joinDjQueue() {
     redirect("/profile");
   }
 
-  const existingEntry = await prisma.djQueueEntry.findFirst({
+  await prisma.$transaction(async (tx) => {
+    const existingEntry = await tx.djQueueEntry.findFirst({
+      where: {
+        djProfileId: djProfile.id,
+        status: {
+          in: ["WAITING", "ACTIVE"],
+        },
+      },
+    });
+
+    if (existingEntry) {
+      return;
+    }
+
+    const [streamState, activeQueueEntry] = await Promise.all([
+      tx.streamState.findUnique({
+        where: { id: "global" },
+      }),
+      tx.djQueueEntry.findFirst({
+        where: { status: "ACTIVE" },
+      }),
+    ]);
+    const antennaIsAvailable = streamState?.status !== "LIVE" && !activeQueueEntry;
+
+    await tx.djQueueEntry.create({
+      data: {
+        djProfileId: djProfile.id,
+        status: antennaIsAvailable ? "ACTIVE" : "WAITING",
+      },
+    });
+
+    if (antennaIsAvailable) {
+      await tx.streamState.upsert({
+        where: { id: "global" },
+        create: {
+          id: "global",
+          status: "WAITING_FOR_DJ",
+          activeDjProfileId: djProfile.id,
+        },
+        update: {
+          status: "WAITING_FOR_DJ",
+          activeDjProfileId: djProfile.id,
+          activeBroadcastSessionId: null,
+        },
+      });
+    }
+  });
+
+  redirect("/dj");
+}
+
+export async function startBroadcast() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
+  const djProfile = await prisma.djProfile.findUnique({
+    where: { userId: session.user.id },
+  });
+
+  if (!djProfile?.active) {
+    redirect("/profile");
+  }
+
+  const activeEntry = await prisma.djQueueEntry.findFirst({
     where: {
       djProfileId: djProfile.id,
-      status: {
-        in: ["WAITING", "ACTIVE"],
-      },
+      status: "ACTIVE",
     },
   });
 
-  if (!existingEntry) {
-    await prisma.djQueueEntry.create({
+  if (!activeEntry) {
+    redirect("/dj");
+  }
+
+  const currentStreamState = await prisma.streamState.findUnique({
+    where: { id: "global" },
+  });
+
+  if (
+    currentStreamState?.status === "LIVE" ||
+    (currentStreamState?.activeDjProfileId && currentStreamState.activeDjProfileId !== djProfile.id)
+  ) {
+    redirect("/dj");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const sessionRecord = await tx.broadcastSession.create({
       data: {
         djProfileId: djProfile.id,
+        status: "LIVE",
+        startedAt: new Date(),
       },
     });
+
+    await tx.streamState.upsert({
+      where: { id: "global" },
+      create: {
+        id: "global",
+        status: "LIVE",
+        activeBroadcastSessionId: sessionRecord.id,
+        activeDjProfileId: djProfile.id,
+      },
+      update: {
+        status: "LIVE",
+        activeBroadcastSessionId: sessionRecord.id,
+        activeDjProfileId: djProfile.id,
+      },
+    });
+  });
+
+  redirect("/dj");
+}
+
+export async function handOverAntenna() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect("/login");
   }
+
+  const djProfile = await prisma.djProfile.findUnique({
+    where: { userId: session.user.id },
+  });
+
+  if (!djProfile) {
+    redirect("/profile");
+  }
+
+  const streamState = await prisma.streamState.findUnique({
+    where: { id: "global" },
+  });
+
+  if (streamState?.activeDjProfileId !== djProfile.id || !streamState.activeBroadcastSessionId) {
+    redirect("/dj");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.broadcastSession.update({
+      where: { id: streamState.activeBroadcastSessionId! },
+      data: {
+        status: "ENDED",
+        endedAt: new Date(),
+        endReason: "handed_over",
+      },
+    });
+
+    await tx.djQueueEntry.updateMany({
+      where: {
+        djProfileId: djProfile.id,
+        status: "ACTIVE",
+      },
+      data: {
+        status: "COMPLETED",
+      },
+    });
+
+    const nextEntry = await tx.djQueueEntry.findFirst({
+      where: { status: "WAITING" },
+      orderBy: { queuedAt: "asc" },
+    });
+
+    if (nextEntry) {
+      await tx.djQueueEntry.update({
+        where: { id: nextEntry.id },
+        data: { status: "ACTIVE" },
+      });
+
+      await tx.streamState.update({
+        where: { id: "global" },
+        data: {
+          status: "WAITING_FOR_DJ",
+          activeBroadcastSessionId: null,
+          activeDjProfileId: nextEntry.djProfileId,
+        },
+      });
+    } else {
+      await tx.streamState.update({
+        where: { id: "global" },
+        data: {
+          status: "IDLE",
+          activeBroadcastSessionId: null,
+          activeDjProfileId: null,
+        },
+      });
+    }
+  });
 
   redirect("/dj");
 }
