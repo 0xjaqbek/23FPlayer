@@ -8,5 +8,5 @@ test("registration hides account fields until access password succeeds", async (
   await page.getByLabel("Access password").fill("wrong");
   await page.getByRole("button", { name: "Continue" }).click();
 
-  await expect(page.getByRole("alert")).toContainText("Invalid registration access");
+  await expect(page.getByText("Invalid registration access.")).toBeVisible();
 });

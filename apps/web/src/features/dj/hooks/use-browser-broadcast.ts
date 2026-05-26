@@ -57,6 +57,7 @@ export function useBrowserBroadcast(stream: MediaStream | null) {
       return;
     }
 
+    const activeStream = stream;
     stoppedRef.current = false;
 
     async function connect(attempt: number) {
@@ -74,7 +75,7 @@ export function useBrowserBroadcast(stream: MediaStream | null) {
       socketRef.current = socket;
 
       socket.onopen = () => {
-        const recorder = new MediaRecorder(stream, {
+        const recorder = new MediaRecorder(activeStream, {
           mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm",
         });
         recorderRef.current = recorder;
@@ -92,7 +93,7 @@ export function useBrowserBroadcast(stream: MediaStream | null) {
         recorderRef.current = null;
 
         if (stoppedRef.current) {
-          setBroadcastState(stream ? "ready" : "input missing");
+          setBroadcastState(activeStream.active ? "ready" : "input missing");
           return;
         }
 

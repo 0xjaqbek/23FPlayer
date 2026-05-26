@@ -1,6 +1,6 @@
 import http from "node:http";
 import { createHmac } from "node:crypto";
-import { WebSocketServer, type WebSocket } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import { verifyBroadcastToken, verifyListenerToken } from "./auth.js";
 import { SessionManager, type RelayClient } from "./session-manager.js";
 import { createHttpListener } from "./stream-endpoint.js";

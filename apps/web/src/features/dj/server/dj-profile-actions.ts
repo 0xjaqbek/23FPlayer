@@ -36,7 +36,7 @@ async function runSerializableTransaction<T>(operation: (tx: Prisma.TransactionC
   throw new Error("Serializable transaction retry failed.");
 }
 
-export async function saveDjProfile(_state: DjProfileActionState, formData: FormData) {
+export async function saveDjProfile(_state: DjProfileActionState, formData: FormData): Promise<DjProfileActionState> {
   const session = await auth();
 
   if (!session?.user?.id) {

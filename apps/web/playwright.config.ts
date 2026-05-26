@@ -11,9 +11,17 @@ export default defineConfig({
   },
   webServer: shouldStartWebServer
     ? {
-        command: "pnpm --filter web dev",
+        command: "corepack pnpm --filter web dev",
         url: baseURL,
         reuseExistingServer: !process.env.CI,
+        env: {
+          AUTH_SECRET: "playwright-auth-secret",
+          DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/23fplayer_test",
+          REGISTRATION_ACCESS_PASSWORD: "access-test",
+          REGISTRATION_GATE_SECRET: "playwright-registration-gate-secret",
+          RELAY_SHARED_SECRET: "playwright-relay-secret",
+          RELAY_LISTENER_SECRET: "playwright-listener-secret",
+        },
         timeout: 120_000,
       }
     : undefined,

@@ -11,6 +11,8 @@ next-env.d.ts
 # Build outputs
 dist/
 coverage/
+playwright-report/
+test-results/
 
 # Prisma
 apps/web/prisma/dev.db

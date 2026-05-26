@@ -49,7 +49,7 @@ function isRateLimited(clientKey: string, now = Date.now()) {
   return current.count > maxGateAttempts;
 }
 
-export async function submitRegistrationGate(_state: RegisterActionState, formData: FormData) {
+export async function submitRegistrationGate(_state: RegisterActionState, formData: FormData): Promise<RegisterActionState> {
   const clientKey = await getClientKey();
   const submittedPassword = String(formData.get("accessPassword") ?? "");
   const rateLimited = isRateLimited(clientKey);
@@ -74,7 +74,7 @@ export async function submitRegistrationGate(_state: RegisterActionState, formDa
   redirect("/register");
 }
 
-export async function createAccount(_state: RegisterActionState, formData: FormData) {
+export async function createAccount(_state: RegisterActionState, formData: FormData): Promise<RegisterActionState> {
   const cookieStore = await cookies();
 
   if (!hasValidRegistrationGateCookie(cookieStore.get(registrationGateCookieName)?.value)) {
