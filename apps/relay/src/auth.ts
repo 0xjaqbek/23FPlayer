@@ -55,3 +55,7 @@ export function createBroadcastTokenForTest(claims: BroadcastTokenClaims, secret
   const payload = `${claims.broadcastSessionId}.${claims.djProfileId}.${claims.expiresAt}`;
   return `${payload}.${sign(payload, secret)}`;
 }
+
+export function verifyListenerToken(token: string | undefined, secret: string) {
+  return token === secret && Boolean(secret);
+}

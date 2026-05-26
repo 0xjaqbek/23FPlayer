@@ -10,6 +10,7 @@ type HandoverCallback = (broadcastSessionId: string) => void | Promise<void>;
 export class SessionManager {
   private broadcaster: { claims: BroadcastTokenClaims; client: RelayClient } | null = null;
   private listeners = new Set<RelayClient>();
+  private chunkBuffer: Buffer[] = [];
   private graceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -18,12 +19,8 @@ export class SessionManager {
   ) {}
 
   acceptBroadcaster(claims: BroadcastTokenClaims, client: RelayClient) {
-    if (this.broadcaster && this.broadcaster.claims.broadcastSessionId !== claims.broadcastSessionId) {
-      return false;
-    }
-
     if (this.broadcaster) {
-      this.broadcaster.client.close();
+      return false;
     }
 
     if (this.graceTimer) {
@@ -50,6 +47,9 @@ export class SessionManager {
 
   addListener(client: RelayClient) {
     this.listeners.add(client);
+    for (const chunk of this.chunkBuffer) {
+      client.send(chunk);
+    }
   }
 
   removeListener(client: RelayClient) {
@@ -57,6 +57,9 @@ export class SessionManager {
   }
 
   broadcastChunk(data: Buffer) {
+    this.chunkBuffer.push(data);
+    this.chunkBuffer = this.chunkBuffer.slice(-30);
+
     for (const listener of this.listeners) {
       listener.send(data);
     }

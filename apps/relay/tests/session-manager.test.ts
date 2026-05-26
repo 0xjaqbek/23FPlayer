@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createBroadcastTokenForTest, verifyBroadcastToken } from "../src/auth";
+import { createBroadcastTokenForTest, verifyBroadcastToken, verifyListenerToken } from "../src/auth";
 import { SessionManager, type RelayClient } from "../src/session-manager";
 
 function createClient() {
@@ -36,6 +36,11 @@ describe("verifyBroadcastToken", () => {
   it("rejects an invalid token", () => {
     expect(verifyBroadcastToken("bad", "secret", 999)).toBeNull();
   });
+
+  it("validates listener tokens against the relay secret", () => {
+    expect(verifyListenerToken("secret", "secret")).toBe(true);
+    expect(verifyListenerToken("wrong", "secret")).toBe(false);
+  });
 });
 
 describe("SessionManager", () => {
@@ -45,7 +50,7 @@ describe("SessionManager", () => {
     const second = createClient();
 
     expect(manager.acceptBroadcaster({ broadcastSessionId: "session-1", djProfileId: "dj-1", expiresAt: 1_000 }, first)).toBe(true);
-    expect(manager.acceptBroadcaster({ broadcastSessionId: "session-2", djProfileId: "dj-2", expiresAt: 1_000 }, second)).toBe(false);
+    expect(manager.acceptBroadcaster({ broadcastSessionId: "session-1", djProfileId: "dj-1", expiresAt: 1_000 }, second)).toBe(false);
   });
 
   it("sends broadcaster chunks to listeners", () => {
@@ -56,6 +61,16 @@ describe("SessionManager", () => {
     manager.broadcastChunk(Buffer.from("audio"));
 
     expect(listener.sent).toEqual([Buffer.from("audio")]);
+  });
+
+  it("replays recent buffered chunks to new listeners", () => {
+    const manager = new SessionManager(15_000, vi.fn());
+    const listener = createClient();
+
+    manager.broadcastChunk(Buffer.from("before"));
+    manager.addListener(listener);
+
+    expect(listener.sent).toEqual([Buffer.from("before")]);
   });
 
   it("starts grace timer when broadcaster disconnects", () => {

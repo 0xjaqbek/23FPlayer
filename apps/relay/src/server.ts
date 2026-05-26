@@ -1,6 +1,6 @@
 import http from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { verifyBroadcastToken } from "./auth";
+import { verifyBroadcastToken, verifyListenerToken } from "./auth";
 import { SessionManager, type RelayClient } from "./session-manager";
 import { createHttpListener } from "./stream-endpoint";
 
@@ -27,6 +27,15 @@ async function notifyGraceExpired(broadcastSessionId: string) {
 const sessionManager = new SessionManager(gracePeriodMs, notifyGraceExpired);
 const server = http.createServer((request, response) => {
   if (request.url?.startsWith("/stream")) {
+    const url = new URL(request.url, "http://localhost");
+    const listenerToken = url.searchParams.get("token") ?? request.headers.authorization?.replace(/^Bearer\s+/i, "");
+
+    if (!verifyListenerToken(listenerToken ?? undefined, relaySecret)) {
+      response.writeHead(401, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: "Unauthorized listener" }));
+      return;
+    }
+
     const listener = createHttpListener(response);
     sessionManager.addListener(listener);
     request.on("close", () => sessionManager.removeListener(listener));
