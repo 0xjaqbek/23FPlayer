@@ -5,6 +5,24 @@ import { presenceWindowMs } from "@/features/antenna/server/presence-service";
 import { voteToChangeDj, type VoteServiceRepository } from "@/features/antenna/server/vote-service";
 import { prisma } from "@/lib/prisma";
 
+async function runSerializableTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await prisma.$transaction(operation, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034" && attempt === 0) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error("Serializable transaction retry failed.");
+}
+
 function createPrismaVoteRepository(): VoteServiceRepository {
   return {
     async findLiveBroadcastSession() {
@@ -86,8 +104,7 @@ function createPrismaVoteRepository(): VoteServiceRepository {
       });
     },
     async promoteNextDjAfterVote(currentBroadcastSessionId, currentDjProfileId) {
-      await prisma.$transaction(
-        async (tx) => {
+      await runSerializableTransaction(async (tx) => {
           const claimedStreamState = await tx.streamState.updateMany({
             where: {
               id: "global",
@@ -151,9 +168,7 @@ function createPrismaVoteRepository(): VoteServiceRepository {
               },
             });
           }
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
+      });
     },
   };
 }
