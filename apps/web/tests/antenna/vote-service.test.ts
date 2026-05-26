@@ -23,6 +23,9 @@ function createVoteRepository(options: {
     async hasWaitingQueueEntry() {
       return options.hasQueue ?? true;
     },
+    async isUserPresent() {
+      return (options.presentListeners ?? 10) > 0;
+    },
     async hasUserVoted(_broadcastSessionId, userId) {
       return votes.includes(userId);
     },
@@ -49,6 +52,8 @@ describe("voteToChangeDj", () => {
 
     expect(repository.votes).toEqual(["user-1"]);
     expect(progress.votes).toBe(1);
+    expect(progress.voteRecorded).toBe(false);
+    expect(repository.promoted).toBe(false);
   });
 
   it("does not allow voting when the queue is empty", async () => {
@@ -58,6 +63,7 @@ describe("voteToChangeDj", () => {
 
     expect(repository.votes).toEqual([]);
     expect(progress.thresholdReached).toBe(false);
+    expect(progress.hasVoted).toBe(false);
   });
 
   it("promotes the next DJ when 60 percent is reached", async () => {
@@ -73,7 +79,25 @@ describe("voteToChangeDj", () => {
       presentListeners: 10,
       requiredVotes: 6,
       thresholdReached: true,
+      hasVoted: true,
+      voteRecorded: true,
     });
     expect(repository.promoted).toBe(true);
+  });
+
+  it("does not record a vote from a user who is not present", async () => {
+    const repository = createVoteRepository({ presentListeners: 0 });
+
+    const progress = await voteToChangeDj(repository, "user-1");
+
+    expect(repository.votes).toEqual([]);
+    expect(progress).toEqual({
+      votes: 0,
+      presentListeners: 0,
+      requiredVotes: 0,
+      thresholdReached: false,
+      hasVoted: false,
+      voteRecorded: false,
+    });
   });
 });

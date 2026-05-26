@@ -5,11 +5,14 @@ export type VoteProgress = {
   presentListeners: number;
   requiredVotes: number;
   thresholdReached: boolean;
+  hasVoted: boolean;
+  voteRecorded: boolean;
 };
 
 export type VoteServiceRepository = {
   findLiveBroadcastSession(): Promise<{ id: string; djProfileId: string } | null>;
   hasWaitingQueueEntry(): Promise<boolean>;
+  isUserPresent(userId: string, now: Date): Promise<boolean>;
   hasUserVoted(broadcastSessionId: string, userId: string): Promise<boolean>;
   createVote(broadcastSessionId: string, userId: string): Promise<void>;
   countVotes(broadcastSessionId: string): Promise<number>;
@@ -26,11 +29,35 @@ export async function voteToChangeDj(repository: VoteServiceRepository, userId: 
       presentListeners: 0,
       requiredVotes: 0,
       thresholdReached: false,
+      hasVoted: false,
+      voteRecorded: false,
     };
   }
 
-  if (!(await repository.hasUserVoted(liveSession.id, userId))) {
+  const present = await repository.isUserPresent(userId, now);
+
+  if (!present) {
+    const [votes, presentListeners] = await Promise.all([
+      repository.countVotes(liveSession.id),
+      repository.countPresentListeners(now),
+    ]);
+
+    return {
+      votes,
+      presentListeners,
+      requiredVotes: presentListeners > 0 ? Math.ceil(presentListeners * 0.6) : 0,
+      thresholdReached: false,
+      hasVoted: false,
+      voteRecorded: false,
+    };
+  }
+
+  const alreadyVoted = await repository.hasUserVoted(liveSession.id, userId);
+  let voteRecorded = false;
+
+  if (!alreadyVoted) {
     await repository.createVote(liveSession.id, userId);
+    voteRecorded = true;
   }
 
   const [votes, presentListeners] = await Promise.all([
@@ -40,7 +67,7 @@ export async function voteToChangeDj(repository: VoteServiceRepository, userId: 
   const requiredVotes = presentListeners > 0 ? Math.ceil(presentListeners * 0.6) : 0;
   const thresholdReached = hasReachedChangeThreshold({ votes, presentListeners });
 
-  if (thresholdReached) {
+  if (thresholdReached && voteRecorded) {
     await repository.promoteNextDjAfterVote(liveSession.id, liveSession.djProfileId);
   }
 
@@ -48,6 +75,8 @@ export async function voteToChangeDj(repository: VoteServiceRepository, userId: 
     votes,
     presentListeners,
     requiredVotes,
-    thresholdReached,
+    thresholdReached: thresholdReached && voteRecorded,
+    hasVoted: true,
+    voteRecorded,
   };
 }

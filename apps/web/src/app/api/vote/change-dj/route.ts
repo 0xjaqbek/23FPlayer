@@ -29,6 +29,18 @@ function createPrismaVoteRepository(): VoteServiceRepository {
         })) > 0
       );
     },
+    async isUserPresent(userId, now) {
+      return Boolean(
+        await prisma.listenerPresence.findFirst({
+          where: {
+            userId,
+            lastHeartbeatAt: {
+              gte: new Date(now.getTime() - presenceWindowMs),
+            },
+          },
+        }),
+      );
+    },
     async hasUserVoted(broadcastSessionId, userId) {
       return Boolean(
         await prisma.changeVote.findUnique({
@@ -146,7 +158,7 @@ export async function POST() {
 
   return NextResponse.json({
     canVote: !progress.thresholdReached && progress.requiredVotes > 0,
-    hasVoted: true,
+    hasVoted: progress.hasVoted,
     votes: progress.votes,
     presentListeners: progress.presentListeners,
     requiredVotes: progress.requiredVotes,
