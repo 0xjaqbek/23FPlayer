@@ -14,7 +14,7 @@ export type VoteServiceRepository = {
   hasWaitingQueueEntry(): Promise<boolean>;
   isUserPresent(userId: string, now: Date): Promise<boolean>;
   hasUserVoted(broadcastSessionId: string, userId: string): Promise<boolean>;
-  createVote(broadcastSessionId: string, userId: string): Promise<void>;
+  createVote(broadcastSessionId: string, userId: string): Promise<boolean>;
   countVotes(broadcastSessionId: string): Promise<number>;
   countPresentListeners(now: Date): Promise<number>;
   promoteNextDjAfterVote(currentBroadcastSessionId: string, currentDjProfileId: string): Promise<void>;
@@ -56,8 +56,7 @@ export async function voteToChangeDj(repository: VoteServiceRepository, userId: 
   let voteRecorded = false;
 
   if (!alreadyVoted) {
-    await repository.createVote(liveSession.id, userId);
-    voteRecorded = true;
+    voteRecorded = await repository.createVote(liveSession.id, userId);
   }
 
   const [votes, presentListeners] = await Promise.all([

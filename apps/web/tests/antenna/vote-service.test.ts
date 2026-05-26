@@ -31,6 +31,7 @@ function createVoteRepository(options: {
     },
     async createVote(_broadcastSessionId, userId) {
       votes.push(userId);
+      return true;
     },
     async countVotes() {
       return votes.length;

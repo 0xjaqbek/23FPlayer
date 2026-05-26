@@ -63,11 +63,13 @@ function createPrismaVoteRepository(): VoteServiceRepository {
         });
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-          return;
+          return false;
         }
 
         throw error;
       }
+
+      return true;
     },
     async countVotes(broadcastSessionId) {
       return prisma.changeVote.count({
