@@ -88,6 +88,21 @@ function createPrismaVoteRepository(): VoteServiceRepository {
     async promoteNextDjAfterVote(currentBroadcastSessionId, currentDjProfileId) {
       await prisma.$transaction(
         async (tx) => {
+          const claimedStreamState = await tx.streamState.updateMany({
+            where: {
+              id: "global",
+              status: "LIVE",
+              activeBroadcastSessionId: currentBroadcastSessionId,
+            },
+            data: {
+              status: "HANDOVER",
+            },
+          });
+
+          if (claimedStreamState.count === 0) {
+            return;
+          }
+
           await tx.broadcastSession.update({
             where: { id: currentBroadcastSessionId },
             data: {
@@ -126,6 +141,15 @@ function createPrismaVoteRepository(): VoteServiceRepository {
                 activeDjProfileId: nextEntry.djProfileId,
               },
             });
+          } else {
+            await tx.streamState.update({
+              where: { id: "global" },
+              data: {
+                status: "IDLE",
+                activeBroadcastSessionId: null,
+                activeDjProfileId: null,
+              },
+            });
           }
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -140,21 +164,6 @@ export async function POST() {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  await prisma.listenerPresence.upsert({
-    where: { userId: session.user.id },
-    create: {
-      userId: session.user.id,
-      lastHeartbeatAt: new Date(),
-      currentPage: "player",
-      listeningState: "open",
-    },
-    update: {
-      lastHeartbeatAt: new Date(),
-      currentPage: "player",
-      listeningState: "open",
-    },
-  });
 
   const progress = await voteToChangeDj(createPrismaVoteRepository(), session.user.id);
 
