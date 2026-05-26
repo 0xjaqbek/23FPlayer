@@ -116,4 +116,18 @@ describe("SessionManager", () => {
     expect(listener.closed).toBe(true);
     expect(manager.listenerCount()).toBe(0);
   });
+
+  it("ends an active broadcast session by session id", () => {
+    const manager = new SessionManager(15_000, vi.fn());
+    const broadcaster = createClient();
+    const listener = createClient();
+
+    manager.acceptBroadcaster({ broadcastSessionId: "session-1", djProfileId: "dj-1", expiresAt: 1_000 }, broadcaster);
+    manager.broadcastChunk(Buffer.from("header"));
+    manager.addListener(listener);
+    manager.endBroadcastSession("session-1");
+
+    expect(broadcaster.closed).toBe(true);
+    expect(manager.hasBroadcaster()).toBe(false);
+  });
 });

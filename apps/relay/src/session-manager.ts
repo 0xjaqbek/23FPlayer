@@ -61,6 +61,24 @@ export class SessionManager {
     }, this.gracePeriodMs);
   }
 
+  endBroadcastSession(broadcastSessionId: string) {
+    if (this.broadcaster?.claims.broadcastSessionId === broadcastSessionId) {
+      this.broadcaster.client.close();
+      this.broadcaster = null;
+    }
+
+    if (this.recoveringSessionId === broadcastSessionId) {
+      this.recoveringSessionId = null;
+    }
+
+    if (this.graceTimer) {
+      clearTimeout(this.graceTimer);
+      this.graceTimer = null;
+    }
+
+    this.clearBuffer();
+  }
+
   addListener(client: RelayClient) {
     this.listeners.add(client);
     if (this.headerChunk && !client.send(this.headerChunk)) {

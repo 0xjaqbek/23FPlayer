@@ -79,8 +79,24 @@ export function createRelayServer(options: RelayServerOptions) {
         return;
       }
 
-      response.writeHead(204);
-      response.end();
+      readJsonBody(request)
+        .then((body) => {
+          const broadcastSessionId = typeof body.broadcastSessionId === "string" ? body.broadcastSessionId : "";
+
+          if (!broadcastSessionId) {
+            response.writeHead(400, { "content-type": "application/json" });
+            response.end(JSON.stringify({ error: "broadcastSessionId is required" }));
+            return;
+          }
+
+          sessionManager.endBroadcastSession(broadcastSessionId);
+          response.writeHead(204);
+          response.end();
+        })
+        .catch(() => {
+          response.writeHead(400, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "Invalid JSON" }));
+        });
       return;
     }
 
