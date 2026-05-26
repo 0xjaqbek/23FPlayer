@@ -1,5 +1,5 @@
 import type { ServerResponse } from "node:http";
-import type { RelayClient } from "./session-manager";
+import type { RelayClient } from "./session-manager.js";
 
 export function createHttpListener(response: ServerResponse): RelayClient {
   response.writeHead(200, {
