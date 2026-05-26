@@ -6,9 +6,11 @@ type DjPanelProps = {
   queueEntry: DjQueueEntry | null;
   queuePosition: number | null;
   isActiveDj: boolean;
+  streamStatus: string;
+  connectionStatus: string;
 };
 
-export function DjPanel({ profile, queueEntry, queuePosition, isActiveDj }: DjPanelProps) {
+export function DjPanel({ profile, queueEntry, queuePosition, isActiveDj, streamStatus, connectionStatus }: DjPanelProps) {
   if (!profile) {
     return (
       <main className="dj-panel">
@@ -30,6 +32,8 @@ export function DjPanel({ profile, queueEntry, queuePosition, isActiveDj }: DjPa
 
       <section className="audio-input-panel">
         <h2>Audio Input</h2>
+        <p>Connection: {connectionStatus}</p>
+        <p>Stream: {streamStatus}</p>
         <label htmlFor="audioInput">Input device</label>
         <select id="audioInput" name="audioInput" disabled>
           <option>Audio device selection arrives in the broadcast task</option>

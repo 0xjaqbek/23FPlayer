@@ -29,6 +29,17 @@ export default async function DjPage() {
   const waitingIndex = queueEntry?.status === "WAITING" ? waitingEntries.findIndex((entry) => entry.id === queueEntry.id) : -1;
   const queuePosition = waitingIndex >= 0 ? waitingIndex + 1 : null;
   const isActiveDj = Boolean(profile && streamState?.activeDjProfileId === profile.id && streamState.status === "LIVE");
+  const streamStatus = streamState?.status ?? "IDLE";
+  const connectionStatus = isActiveDj ? "ready for browser broadcast" : "not connected";
 
-  return <DjPanel profile={profile} queueEntry={queueEntry} queuePosition={queuePosition} isActiveDj={isActiveDj} />;
+  return (
+    <DjPanel
+      profile={profile}
+      queueEntry={queueEntry}
+      queuePosition={queuePosition}
+      isActiveDj={isActiveDj}
+      streamStatus={streamStatus}
+      connectionStatus={connectionStatus}
+    />
+  );
 }
