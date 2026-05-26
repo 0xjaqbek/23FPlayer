@@ -1,5 +1,6 @@
 import type { DjProfile, DjQueueEntry } from "@prisma/client";
-import { handOverAntenna, joinDjQueue, startBroadcast } from "@/features/dj/server/dj-profile-actions";
+import { handOverAntenna, joinDjQueue } from "@/features/dj/server/dj-profile-actions";
+import { DjAudioPanel } from "./dj-audio-panel";
 
 type DjPanelProps = {
   profile: DjProfile | null;
@@ -30,18 +31,11 @@ export function DjPanel({ profile, queueEntry, queuePosition, isActiveDj, stream
         </p>
       </section>
 
-      <section className="audio-input-panel">
-        <h2>Audio Input</h2>
-        <p>Connection: {connectionStatus}</p>
-        <p>Stream: {streamStatus}</p>
-        <label htmlFor="audioInput">Input device</label>
-        <select id="audioInput" name="audioInput" disabled>
-          <option>Audio device selection arrives in the broadcast task</option>
-        </select>
-        <div aria-label="Input level meter" className="level-meter">
-          <div className="level-meter-fill" style={{ width: "0%" }} />
-        </div>
-      </section>
+      <DjAudioPanel
+        streamStatus={streamStatus}
+        connectionStatus={connectionStatus}
+        canStartBroadcast={queueEntry?.status === "ACTIVE" && !isActiveDj}
+      />
 
       <section className="queue-status-panel">
         <h2>Queue</h2>
@@ -51,11 +45,6 @@ export function DjPanel({ profile, queueEntry, queuePosition, isActiveDj, stream
         {!queueEntry ? (
           <form action={joinDjQueue}>
             <button type="submit">Join queue</button>
-          </form>
-        ) : null}
-        {queueEntry?.status === "ACTIVE" && !isActiveDj ? (
-          <form action={startBroadcast}>
-            <button type="submit">Start broadcast</button>
           </form>
         ) : null}
         {isActiveDj ? (
