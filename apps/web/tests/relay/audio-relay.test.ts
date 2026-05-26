@@ -1,9 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { canCreateBroadcastToken } from "@/features/relay/server/broadcast-token-auth";
 import { CustomAudioRelayClient } from "@/features/relay/server/custom-relay-client";
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
 describe("CustomAudioRelayClient", () => {
   it("creates a signed broadcast token and relay websocket URL", async () => {
+    vi.useFakeTimers();
     vi.stubEnv("RELAY_SHARED_SECRET", "test-secret");
     vi.stubEnv("RELAY_PUBLIC_WS_URL", "ws://relay.test/broadcast");
     vi.setSystemTime(new Date("2026-05-26T10:00:00.000Z"));

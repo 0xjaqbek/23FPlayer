@@ -1,7 +1,13 @@
 import { createHmac } from "node:crypto";
-import type { AudioRelay, BroadcastTokenInput } from "./audio-relay";
+import { z } from "zod";
+import type { AudioRelay, BroadcastTokenInput, BroadcastTokenResult } from "./audio-relay";
 
 const tokenTtlSeconds = 60;
+const broadcastTokenResultSchema = z.object({
+  token: z.string().min(1),
+  websocketUrl: z.string().url().or(z.string().startsWith("ws://")).or(z.string().startsWith("wss://")),
+  expiresIn: z.number().int().positive(),
+});
 
 function signBroadcastToken(payload: string, secret: string) {
   return createHmac("sha256", secret).update(payload).digest("base64url");
@@ -18,7 +24,7 @@ function getRelaySecret() {
 }
 
 export class CustomAudioRelayClient implements AudioRelay {
-  async createBroadcastToken(input: BroadcastTokenInput) {
+  async createBroadcastToken(input: BroadcastTokenInput): Promise<BroadcastTokenResult> {
     const internalUrl = process.env.RELAY_INTERNAL_URL;
 
     if (internalUrl) {
@@ -35,7 +41,7 @@ export class CustomAudioRelayClient implements AudioRelay {
         throw new Error("Relay rejected broadcast token request.");
       }
 
-      return response.json();
+      return broadcastTokenResultSchema.parse(await response.json());
     }
 
     return createLocalBroadcastToken(input);
@@ -63,7 +69,7 @@ export class CustomAudioRelayClient implements AudioRelay {
   }
 }
 
-function createLocalBroadcastToken(input: BroadcastTokenInput) {
+function createLocalBroadcastToken(input: BroadcastTokenInput): BroadcastTokenResult {
   const expiresAt = Math.floor(Date.now() / 1000) + tokenTtlSeconds;
   const payload = `${input.broadcastSessionId}.${input.djProfileId}.${expiresAt}`;
   const signature = signBroadcastToken(payload, getRelaySecret());
