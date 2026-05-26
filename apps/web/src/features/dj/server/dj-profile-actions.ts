@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -16,6 +17,24 @@ const djProfileSchema = z.object({
 export type DjProfileActionState = {
   error?: string;
 };
+
+async function runSerializableTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await prisma.$transaction(operation, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034" && attempt === 0) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error("Serializable transaction retry failed.");
+}
 
 export async function saveDjProfile(_state: DjProfileActionState, formData: FormData) {
   const session = await auth();
@@ -63,7 +82,7 @@ export async function joinDjQueue() {
     redirect("/profile");
   }
 
-  await prisma.$transaction(async (tx) => {
+  await runSerializableTransaction(async (tx) => {
     const existingEntry = await tx.djQueueEntry.findFirst({
       where: {
         djProfileId: djProfile.id,
@@ -77,14 +96,20 @@ export async function joinDjQueue() {
       return;
     }
 
-    const [streamState, activeQueueEntry] = await Promise.all([
-      tx.streamState.findUnique({
-        where: { id: "global" },
-      }),
-      tx.djQueueEntry.findFirst({
-        where: { status: "ACTIVE" },
-      }),
-    ]);
+    const streamState = await tx.streamState.upsert({
+      where: { id: "global" },
+      create: {
+        id: "global",
+        status: "IDLE",
+      },
+      update: {
+        updatedAt: new Date(),
+      },
+    });
+
+    const activeQueueEntry = await tx.djQueueEntry.findFirst({
+      where: { status: "ACTIVE" },
+    });
     const antennaIsAvailable = streamState?.status !== "LIVE" && !activeQueueEntry;
 
     await tx.djQueueEntry.create({
@@ -140,18 +165,34 @@ export async function startBroadcast() {
     redirect("/dj");
   }
 
-  const currentStreamState = await prisma.streamState.findUnique({
-    where: { id: "global" },
-  });
+  await runSerializableTransaction(async (tx) => {
+    const streamState = await tx.streamState.upsert({
+      where: { id: "global" },
+      create: {
+        id: "global",
+        status: "IDLE",
+      },
+      update: {
+        updatedAt: new Date(),
+      },
+    });
 
-  if (
-    currentStreamState?.status === "LIVE" ||
-    (currentStreamState?.activeDjProfileId && currentStreamState.activeDjProfileId !== djProfile.id)
-  ) {
-    redirect("/dj");
-  }
+    const txActiveEntry = await tx.djQueueEntry.findFirst({
+      where: {
+        id: activeEntry.id,
+        djProfileId: djProfile.id,
+        status: "ACTIVE",
+      },
+    });
 
-  await prisma.$transaction(async (tx) => {
+    if (
+      !txActiveEntry ||
+      streamState.status === "LIVE" ||
+      (streamState.activeDjProfileId && streamState.activeDjProfileId !== djProfile.id)
+    ) {
+      return;
+    }
+
     const sessionRecord = await tx.broadcastSession.create({
       data: {
         djProfileId: djProfile.id,
@@ -202,7 +243,7 @@ export async function handOverAntenna() {
     redirect("/dj");
   }
 
-  await prisma.$transaction(async (tx) => {
+  await runSerializableTransaction(async (tx) => {
     await tx.broadcastSession.update({
       where: { id: streamState.activeBroadcastSessionId! },
       data: {

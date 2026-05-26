@@ -47,13 +47,13 @@ export function DjPanel({ profile, queueEntry, queuePosition, isActiveDj, stream
         <h2>Queue</h2>
         {isActiveDj ? <p>You have the antenna.</p> : null}
         {queueEntry?.status === "WAITING" && queuePosition ? <p>Queue position: {queuePosition}</p> : null}
-        {queueEntry?.status === "ACTIVE" ? <p>You are next to broadcast.</p> : null}
+        {queueEntry?.status === "ACTIVE" && !isActiveDj ? <p>You are next to broadcast.</p> : null}
         {!queueEntry ? (
           <form action={joinDjQueue}>
             <button type="submit">Join queue</button>
           </form>
         ) : null}
-        {queueEntry?.status === "ACTIVE" ? (
+        {queueEntry?.status === "ACTIVE" && !isActiveDj ? (
           <form action={startBroadcast}>
             <button type="submit">Start broadcast</button>
           </form>
