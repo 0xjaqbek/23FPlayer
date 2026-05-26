@@ -44,7 +44,7 @@ export function DjAudioPanel({ streamStatus, connectionStatus, canStartBroadcast
         <div className="level-meter-fill" style={{ width: `${Math.round(levelMeter.level * 100)}%` }} />
       </div>
       {canStartBroadcast ? (
-        <button type="button" disabled={!levelMeter.stream} onClick={broadcast.startBroadcast}>
+        <button type="button" disabled={!levelMeter.stream || broadcast.connectionState !== "ready"} onClick={broadcast.startBroadcast}>
           Start broadcast
         </button>
       ) : null}

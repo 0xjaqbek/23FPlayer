@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -23,6 +24,24 @@ function createBroadcastToken(input: { broadcastSessionId: string; djProfileId: 
   return `${payload}.${signature}`;
 }
 
+async function runSerializableTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await prisma.$transaction(operation, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034" && attempt === 0) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error("Serializable transaction retry failed.");
+}
+
 export async function POST() {
   const session = await auth();
 
@@ -38,58 +57,68 @@ export async function POST() {
     return NextResponse.json({ error: "DJ profile required" }, { status: 403 });
   }
 
-  const activeEntry = await prisma.djQueueEntry.findFirst({
-    where: {
-      djProfileId: djProfile.id,
-      status: "ACTIVE",
-    },
+  const broadcastSession = await runSerializableTransaction(async (tx) => {
+    const activeEntry = await tx.djQueueEntry.findFirst({
+      where: {
+        djProfileId: djProfile.id,
+        status: "ACTIVE",
+      },
+    });
+
+    if (!activeEntry) {
+      return null;
+    }
+
+    const streamState = await tx.streamState.upsert({
+      where: { id: "global" },
+      create: {
+        id: "global",
+        status: "WAITING_FOR_DJ",
+        activeDjProfileId: djProfile.id,
+      },
+      update: {
+        updatedAt: new Date(),
+      },
+      include: {
+        activeBroadcastSession: true,
+      },
+    });
+
+    if (streamState.status === "LIVE") {
+      if (streamState.activeDjProfileId !== djProfile.id || !streamState.activeBroadcastSession) {
+        return null;
+      }
+
+      return streamState.activeBroadcastSession;
+    }
+
+    if (streamState.status !== "WAITING_FOR_DJ" || streamState.activeDjProfileId !== djProfile.id) {
+      return null;
+    }
+
+    const nextSession = await tx.broadcastSession.create({
+      data: {
+        djProfileId: djProfile.id,
+        status: "LIVE",
+        startedAt: new Date(),
+      },
+    });
+
+    await tx.streamState.update({
+      where: { id: "global" },
+      data: {
+        status: "LIVE",
+        activeBroadcastSessionId: nextSession.id,
+        activeDjProfileId: djProfile.id,
+      },
+    });
+
+    return nextSession;
   });
 
-  if (!activeEntry) {
+  if (!broadcastSession) {
     return NextResponse.json({ error: "Antenna is not assigned to this DJ" }, { status: 403 });
   }
-
-  const streamState = await prisma.streamState.findUnique({
-    where: { id: "global" },
-    include: { activeBroadcastSession: true },
-  });
-
-  if (
-    streamState?.status === "LIVE" &&
-    streamState.activeDjProfileId !== djProfile.id
-  ) {
-    return NextResponse.json({ error: "Another DJ is live" }, { status: 409 });
-  }
-
-  const broadcastSession =
-    streamState?.status === "LIVE" && streamState.activeBroadcastSession?.djProfileId === djProfile.id
-      ? streamState.activeBroadcastSession
-      : await prisma.$transaction(async (tx) => {
-          const nextSession = await tx.broadcastSession.create({
-            data: {
-              djProfileId: djProfile.id,
-              status: "LIVE",
-              startedAt: new Date(),
-            },
-          });
-
-          await tx.streamState.upsert({
-            where: { id: "global" },
-            create: {
-              id: "global",
-              status: "LIVE",
-              activeBroadcastSessionId: nextSession.id,
-              activeDjProfileId: djProfile.id,
-            },
-            update: {
-              status: "LIVE",
-              activeBroadcastSessionId: nextSession.id,
-              activeDjProfileId: djProfile.id,
-            },
-          });
-
-          return nextSession;
-        });
 
   return NextResponse.json({
     token: createBroadcastToken({

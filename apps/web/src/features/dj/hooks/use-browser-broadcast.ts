@@ -14,36 +14,57 @@ export function useBrowserBroadcast(stream: MediaStream | null) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const stoppedRef = useRef(false);
+  const connectionStateRef = useRef<BroadcastConnectionState>("input missing");
 
-  useEffect(() => {
-    if (connectionState === "input missing" || connectionState === "ready") {
-      setConnectionState(stream ? "ready" : "input missing");
-    }
-  }, [connectionState, stream]);
-
-  const stopBroadcast = useCallback(() => {
-    stoppedRef.current = true;
+  function cleanupConnection() {
     recorderRef.current?.stop();
     recorderRef.current = null;
     socketRef.current?.close();
     socketRef.current = null;
-    setConnectionState(stream ? "ready" : "input missing");
+  }
+
+  function setBroadcastState(nextState: BroadcastConnectionState) {
+    connectionStateRef.current = nextState;
+    setConnectionState(nextState);
+  }
+
+  useEffect(() => {
+    if (connectionState === "input missing" || connectionState === "ready") {
+      setBroadcastState(stream ? "ready" : "input missing");
+    }
+  }, [connectionState, stream]);
+
+  useEffect(() => {
+    return () => {
+      stoppedRef.current = true;
+      cleanupConnection();
+    };
+  }, [stream]);
+
+  const stopBroadcast = useCallback(() => {
+    stoppedRef.current = true;
+    cleanupConnection();
+    setBroadcastState(stream ? "ready" : "input missing");
   }, [stream]);
 
   const startBroadcast = useCallback(async () => {
+    if (["connecting", "broadcasting", "reconnecting"].includes(connectionStateRef.current)) {
+      return;
+    }
+
     if (!stream) {
-      setConnectionState("input missing");
+      setBroadcastState("input missing");
       return;
     }
 
     stoppedRef.current = false;
 
     async function connect(attempt: number) {
-      setConnectionState(attempt > 0 ? "reconnecting" : "connecting");
+      setBroadcastState(attempt > 0 ? "reconnecting" : "connecting");
       const tokenResponse = await fetch("/api/broadcast/token", { method: "POST" });
 
       if (!tokenResponse.ok) {
-        setConnectionState("disconnected");
+        setBroadcastState("disconnected");
         return;
       }
 
@@ -63,7 +84,7 @@ export function useBrowserBroadcast(stream: MediaStream | null) {
           }
         };
         recorder.start(1000);
-        setConnectionState("broadcasting");
+        setBroadcastState("broadcasting");
       };
 
       socket.onclose = () => {
@@ -75,11 +96,11 @@ export function useBrowserBroadcast(stream: MediaStream | null) {
           return;
         }
 
-        setConnectionState("disconnected");
+        setBroadcastState("disconnected");
       };
 
       socket.onerror = () => {
-        setConnectionState("reconnecting");
+        setBroadcastState("reconnecting");
       };
     }
 
