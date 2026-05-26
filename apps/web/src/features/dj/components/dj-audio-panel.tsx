@@ -14,15 +14,12 @@ export function DjAudioPanel({ streamStatus, connectionStatus, canStartBroadcast
   const audioInputs = useAudioInputs();
   const levelMeter = useInputLevelMeter(audioInputs.selectedDeviceId);
   const broadcast = useBrowserBroadcast(levelMeter.stream);
-  const currentConnectionStatus =
-    broadcast.connectionState === "input missing" && connectionStatus !== "not connected"
-      ? connectionStatus
-      : broadcast.connectionState;
 
   return (
     <section className="audio-input-panel">
       <h2>Audio Input</h2>
-      <p>Connection: {currentConnectionStatus}</p>
+      <p>Connection: {broadcast.connectionState}</p>
+      <p>App connection: {connectionStatus}</p>
       <p>Stream: {streamStatus}</p>
       <label htmlFor="audioInput">Input device</label>
       <select
