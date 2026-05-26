@@ -33,7 +33,7 @@ export default async function LoginPage(props: LoginPageProps) {
   const hasError = searchParams?.error === "credentials";
 
   return (
-    <main>
+    <main className="auth-page">
       <form action={login} className="auth-panel">
         <h1>Log In</h1>
         <label htmlFor="email">Email</label>

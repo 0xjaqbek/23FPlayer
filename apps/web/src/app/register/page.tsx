@@ -6,5 +6,5 @@ export default async function RegisterPage() {
   const cookieStore = await cookies();
   const gatePassed = hasValidRegistrationGateCookie(cookieStore.get(registrationGateCookieName)?.value);
 
-  return <main>{gatePassed ? <AccountRegistrationForm /> : <RegistrationGateForm />}</main>;
+  return <main className="auth-page">{gatePassed ? <AccountRegistrationForm /> : <RegistrationGateForm />}</main>;
 }
