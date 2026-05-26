@@ -1,4 +1,5 @@
 import http from "node:http";
+import { createHmac } from "node:crypto";
 import { WebSocketServer, type WebSocket } from "ws";
 import { verifyBroadcastToken, verifyListenerToken } from "./auth.js";
 import { SessionManager, type RelayClient } from "./session-manager.js";
@@ -6,6 +7,7 @@ import { createHttpListener } from "./stream-endpoint.js";
 
 type RelayServerOptions = {
   relaySecret: string;
+  listenerSecret: string;
   appHandoverUrl?: string;
   gracePeriodMs?: number;
   maxPayloadBytes?: number;
@@ -32,11 +34,60 @@ export function createRelayServer(options: RelayServerOptions) {
 
   const sessionManager = new SessionManager(gracePeriodMs, notifyGraceExpired);
   const server = http.createServer((request, response) => {
-    if (request.url?.startsWith("/stream")) {
-      const url = new URL(request.url, "http://localhost");
+    const url = new URL(request.url ?? "/", "http://localhost");
+
+    if (request.method === "POST" && url.pathname === "/broadcast/token") {
+      if (!isInternalRequestAuthorized(request.headers.authorization, options.relaySecret)) {
+        response.writeHead(401, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+
+      readJsonBody(request)
+        .then((body) => {
+          const broadcastSessionId = typeof body.broadcastSessionId === "string" ? body.broadcastSessionId : "";
+          const djProfileId = typeof body.djProfileId === "string" ? body.djProfileId : "";
+
+          if (!broadcastSessionId || !djProfileId) {
+            response.writeHead(400, { "content-type": "application/json" });
+            response.end(JSON.stringify({ error: "Invalid token request" }));
+            return;
+          }
+
+          const expiresAt = Math.floor(Date.now() / 1000) + 60;
+          const token = createRelayBroadcastToken({ broadcastSessionId, djProfileId, expiresAt }, options.relaySecret);
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(
+            JSON.stringify({
+              token,
+              websocketUrl: process.env.RELAY_PUBLIC_WS_URL ?? "ws://localhost:4010/broadcast",
+              expiresIn: 60,
+            }),
+          );
+        })
+        .catch(() => {
+          response.writeHead(400, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "Invalid JSON" }));
+        });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/broadcast/end") {
+      if (!isInternalRequestAuthorized(request.headers.authorization, options.relaySecret)) {
+        response.writeHead(401, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+
+    if (url.pathname === "/stream") {
       const listenerToken = url.searchParams.get("token") ?? request.headers.authorization?.replace(/^Bearer\s+/i, "");
 
-      if (!verifyListenerToken(listenerToken ?? undefined, options.relaySecret)) {
+      if (!verifyListenerToken(listenerToken ?? undefined, options.listenerSecret)) {
         response.writeHead(401, { "content-type": "application/json" });
         response.end(JSON.stringify({ error: "Unauthorized listener" }));
         return;
@@ -120,4 +171,32 @@ function normalizeWebSocketData(data: WebSocket.RawData) {
   }
 
   return Buffer.from(data);
+}
+
+function isInternalRequestAuthorized(authorization: string | undefined, relaySecret: string) {
+  return authorization === `Bearer ${relaySecret}` && Boolean(relaySecret);
+}
+
+function createRelayBroadcastToken(
+  input: { broadcastSessionId: string; djProfileId: string; expiresAt: number },
+  relaySecret: string,
+) {
+  const payload = `${input.broadcastSessionId}.${input.djProfileId}.${input.expiresAt}`;
+  const signature = createHmac("sha256", relaySecret).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function readJsonBody(request: http.IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    request.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>);
+      } catch (error) {
+        reject(error);
+      }
+    });
+    request.on("error", reject);
+  });
 }

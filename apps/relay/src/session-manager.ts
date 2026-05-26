@@ -10,6 +10,7 @@ type HandoverCallback = (broadcastSessionId: string) => void | Promise<void>;
 export class SessionManager {
   private broadcaster: { claims: BroadcastTokenClaims; client: RelayClient } | null = null;
   private listeners = new Set<RelayClient>();
+  private headerChunk: Buffer | null = null;
   private chunkBuffer: Buffer[] = [];
   private bufferedBytes = 0;
   private recoveringSessionId: string | null = null;
@@ -62,8 +63,18 @@ export class SessionManager {
 
   addListener(client: RelayClient) {
     this.listeners.add(client);
+    if (this.headerChunk && !client.send(this.headerChunk)) {
+      this.removeListener(client);
+      client.close();
+      return;
+    }
+
     for (const chunk of this.chunkBuffer) {
-      client.send(chunk);
+      if (!client.send(chunk)) {
+        this.removeListener(client);
+        client.close();
+        return;
+      }
     }
   }
 
@@ -95,6 +106,11 @@ export class SessionManager {
       return;
     }
 
+    if (!this.headerChunk) {
+      this.headerChunk = data;
+      return;
+    }
+
     this.chunkBuffer.push(data);
     this.bufferedBytes += data.length;
 
@@ -105,6 +121,7 @@ export class SessionManager {
   }
 
   private clearBuffer() {
+    this.headerChunk = null;
     this.chunkBuffer = [];
     this.bufferedBytes = 0;
   }

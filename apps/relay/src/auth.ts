@@ -56,6 +56,27 @@ export function createBroadcastTokenForTest(claims: BroadcastTokenClaims, secret
   return `${payload}.${sign(payload, secret)}`;
 }
 
-export function verifyListenerToken(token: string | undefined, secret: string) {
-  return token === secret && Boolean(secret);
+export function createListenerTokenForTest(expiresAt: number, secret: string) {
+  const payload = `listener.${expiresAt}`;
+  return `${payload}.${sign(payload, secret)}`;
+}
+
+export function verifyListenerToken(token: string | undefined, secret: string, now = Math.floor(Date.now() / 1000)) {
+  if (!token || !secret) {
+    return false;
+  }
+
+  const [kind, expiresAtRaw, signature, ...extraParts] = token.split(".");
+
+  if (kind !== "listener" || !expiresAtRaw || !signature || extraParts.length > 0) {
+    return false;
+  }
+
+  const expiresAt = Number(expiresAtRaw);
+
+  if (!Number.isFinite(expiresAt) || expiresAt < now) {
+    return false;
+  }
+
+  return safeEqual(signature, sign(`${kind}.${expiresAtRaw}`, secret));
 }

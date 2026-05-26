@@ -58,10 +58,11 @@ describe("CustomAudioRelayClient", () => {
 
   it("returns the configured stream URL", () => {
     vi.stubEnv("RELAY_PUBLIC_STREAM_URL", "https://relay.test/live.webm");
+    vi.stubEnv("RELAY_LISTENER_SECRET", "listener-secret");
 
     const relay = new CustomAudioRelayClient();
 
-    expect(relay.getStreamUrl()).toBe("https://relay.test/live.webm");
+    expect(relay.getStreamUrl()).toContain("https://relay.test/live.webm?token=");
   });
 });
 

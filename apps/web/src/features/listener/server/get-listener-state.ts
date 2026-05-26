@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { audioRelay } from "@/features/relay/server/custom-relay-client";
 
 export type ListenerQueueEntry = {
   id: string;
@@ -97,7 +98,7 @@ export async function getListenerState(userId: string | undefined): Promise<List
   return {
     stream: {
       status,
-      url: status === "live" ? process.env.RELAY_PUBLIC_STREAM_URL ?? null : null,
+      url: status === "live" ? audioRelay.getStreamUrl() : null,
     },
     activeDj: streamState?.activeDjProfile
       ? {

@@ -13,9 +13,11 @@ RELAY_INTERNAL_URL=
 RELAY_PUBLIC_WS_URL=
 RELAY_PUBLIC_STREAM_URL=
 RELAY_SHARED_SECRET=
+RELAY_LISTENER_SECRET=
+APP_HANDOVER_URL=
 ```
 
-`REGISTRATION_ACCESS_PASSWORD` protects the registration gate. `RELAY_SHARED_SECRET` must match the relay service.
+`REGISTRATION_ACCESS_PASSWORD` protects the registration gate. `RELAY_SHARED_SECRET` signs broadcaster tokens and `RELAY_LISTENER_SECRET` signs listener stream tokens; both must match the relay service.
 
 ## Commands
 

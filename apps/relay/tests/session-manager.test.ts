@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createBroadcastTokenForTest, verifyBroadcastToken, verifyListenerToken } from "../src/auth.js";
+import { createBroadcastTokenForTest, createListenerTokenForTest, verifyBroadcastToken, verifyListenerToken } from "../src/auth.js";
 import { SessionManager, type RelayClient } from "../src/session-manager.js";
 
 function createClient() {
@@ -42,9 +42,11 @@ describe("verifyBroadcastToken", () => {
     expect(verifyBroadcastToken("bad", "secret", 999)).toBeNull();
   });
 
-  it("validates listener tokens against the relay secret", () => {
-    expect(verifyListenerToken("secret", "secret")).toBe(true);
-    expect(verifyListenerToken("wrong", "secret")).toBe(false);
+  it("validates signed listener tokens against the listener secret", () => {
+    const token = createListenerTokenForTest(1_000, "secret");
+
+    expect(verifyListenerToken(token, "secret", 999)).toBe(true);
+    expect(verifyListenerToken("wrong", "secret", 999)).toBe(false);
   });
 });
 

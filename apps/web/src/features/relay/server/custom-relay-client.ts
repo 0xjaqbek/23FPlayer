@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AudioRelay, BroadcastTokenInput, BroadcastTokenResult } from "./audio-relay";
 
 const tokenTtlSeconds = 60;
+const listenerTokenTtlSeconds = 5 * 60;
 const broadcastTokenResultSchema = z.object({
   token: z.string().min(1),
   websocketUrl: z.string().url().or(z.string().startsWith("ws://")).or(z.string().startsWith("wss://")),
@@ -18,6 +19,16 @@ function getRelaySecret() {
 
   if (!secret) {
     throw new Error("Relay shared secret is not configured.");
+  }
+
+  return secret;
+}
+
+function getListenerSecret() {
+  const secret = process.env.RELAY_LISTENER_SECRET;
+
+  if (!secret) {
+    throw new Error("Relay listener secret is not configured.");
   }
 
   return secret;
@@ -65,7 +76,19 @@ export class CustomAudioRelayClient implements AudioRelay {
   }
 
   getStreamUrl() {
-    return process.env.RELAY_PUBLIC_STREAM_URL ?? null;
+    const streamUrl = process.env.RELAY_PUBLIC_STREAM_URL;
+
+    if (!streamUrl) {
+      return null;
+    }
+
+    const expiresAt = Math.floor(Date.now() / 1000) + listenerTokenTtlSeconds;
+    const payload = `listener.${expiresAt}`;
+    const signature = signBroadcastToken(payload, getListenerSecret());
+    const url = new URL(streamUrl);
+    url.searchParams.set("token", `${payload}.${signature}`);
+
+    return url.toString();
   }
 }
 
