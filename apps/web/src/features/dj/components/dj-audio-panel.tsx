@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useAudioInputs } from "@/features/dj/hooks/use-audio-inputs";
 import { useBrowserBroadcast } from "@/features/dj/hooks/use-browser-broadcast";
 import { useInputLevelMeter } from "@/features/dj/hooks/use-input-level-meter";
@@ -14,6 +15,13 @@ export function DjAudioPanel({ streamStatus, connectionStatus, canStartBroadcast
   const audioInputs = useAudioInputs();
   const levelMeter = useInputLevelMeter(audioInputs.selectedDeviceId);
   const broadcast = useBrowserBroadcast(levelMeter.stream);
+  const [copiedBrowser, setCopiedBrowser] = useState<string | null>(null);
+  const settingsLinks = useMemo(() => getMicrophoneSettingsLinks(), []);
+
+  async function copySettingsLink(browser: string, url: string) {
+    await navigator.clipboard?.writeText(url);
+    setCopiedBrowser(browser);
+  }
 
   return (
     <section className="audio-input-panel">
@@ -24,6 +32,23 @@ export function DjAudioPanel({ streamStatus, connectionStatus, canStartBroadcast
       <button type="button" onClick={audioInputs.refreshDevices}>
         {audioInputs.permissionState === "denied" ? "Retry microphone access" : "Enable microphone"}
       </button>
+      <div className="permission-helper">
+        <div>
+          <h3>Browser microphone settings</h3>
+          <p>Copy the address for your browser, paste it into the address bar, allow microphone access for this site, then refresh DJ panel.</p>
+        </div>
+        <ul>
+          {settingsLinks.map((link) => (
+            <li key={link.browser}>
+              <span>{link.browser}</span>
+              <code>{link.url}</code>
+              <button type="button" onClick={() => copySettingsLink(link.browser, link.url)}>
+                {copiedBrowser === link.browser ? "Copied" : `Copy ${link.browser} settings link`}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
       <label htmlFor="audioInput">Input device</label>
       <select
         id="audioInput"
@@ -58,4 +83,27 @@ export function DjAudioPanel({ streamStatus, connectionStatus, canStartBroadcast
       ) : null}
     </section>
   );
+}
+
+function getMicrophoneSettingsLinks() {
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "https://23-f-player-web.vercel.app";
+  const encodedOrigin = encodeURIComponent(origin);
+
+  return [
+    {
+      browser: "Chrome",
+      url: `chrome://settings/content/siteDetails?site=${encodedOrigin}`,
+    },
+    {
+      browser: "Edge",
+      url: `edge://settings/content/siteDetails?site=${encodedOrigin}`,
+    },
+    {
+      browser: "Firefox",
+      url: "about:preferences#privacy",
+    },
+  ];
 }

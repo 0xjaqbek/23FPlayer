@@ -382,6 +382,61 @@ audio {
   margin-bottom: 2px;
 }
 
+.permission-helper {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(112, 214, 255, 0.22);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: rgba(112, 214, 255, 0.06);
+}
+
+.permission-helper h3 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 0.96rem;
+  letter-spacing: 0;
+}
+
+.permission-helper ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.permission-helper li {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.permission-helper span {
+  color: var(--muted-strong);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.permission-helper code {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 9px 10px;
+  color: var(--cyan);
+  background: rgba(3, 6, 9, 0.58);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.permission-helper button {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.82rem;
+}
+
 .level-meter {
   height: 18px;
   overflow: hidden;
@@ -435,6 +490,10 @@ audio {
 
   .player-now {
     min-height: 360px;
+  }
+
+  .permission-helper li {
+    grid-template-columns: 1fr;
   }
 
   .auth-panel,

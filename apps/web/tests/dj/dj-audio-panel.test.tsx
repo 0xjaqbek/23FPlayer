@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { DjAudioPanel } from "@/features/dj/components/dj-audio-panel";
 
@@ -35,6 +35,11 @@ vi.mock("@/features/dj/hooks/use-browser-broadcast", () => ({
 describe("DjAudioPanel", () => {
   beforeEach(() => {
     refreshDevices.mockClear();
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   test("asks for microphone access from an explicit user click", () => {
@@ -43,5 +48,17 @@ describe("DjAudioPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enable microphone" }));
 
     expect(refreshDevices).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows browser microphone settings helper with copy actions", async () => {
+    render(<DjAudioPanel streamStatus="IDLE" connectionStatus="not connected" canStartBroadcast={false} />);
+
+    expect(screen.getByText("Browser microphone settings")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Chrome settings link" }));
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("chrome://settings/content/siteDetails"));
+    });
   });
 });
